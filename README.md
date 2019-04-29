@@ -2,7 +2,7 @@
 
 Library and command line for scanning a source path and sub directories and adding or 
 setting the `description` property of the Swagger OpenAPI 
-`@io.swagger.v3.oas.annotations.media.Schema annotation` from the Javadoc.
+`@io.swagger.v3.oas.annotations.media.Schema` annotation from the Javadoc.
 
 # Features
 
@@ -10,17 +10,19 @@ The library in its current state was created for setting the data model document
 
 This is the first version and has the following limitations:
 
-* No methods are scanned
-* No tags are used
+* No methods are scanned only fields and the class is annotated
 
 # Usage
+
+__NOTE:__ The `exclude` and `include` options is using a glob expression. Take note that to use a wildcard over path 
+separators two asterisks have to be used. 
 
 ## Java
 
 ```
 Enricher enricher = new Enricher(buildPath(User.class.getPackage().getName()),
             Collections.singleton("**User.java"), Collections.singleton("**.bak"));
-    enricher.enrich();.model
+enricher.enrich();
 ```
 
 ## Maven
