@@ -42,6 +42,7 @@ enricher.enrich();
         </executions>
         <configuration>
           <mainClass>de.ohmesoftware.javadoctoopenapischema.Enricher</mainClass>
+          <includePluginDependencies>true</includePluginDependencies>
           <arguments>
             <argument>-sourcePath</argument>
             <argument>src/test/java/my/domain/project/model</argument>
