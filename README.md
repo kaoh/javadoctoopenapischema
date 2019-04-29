@@ -1,16 +1,11 @@
 # Introduction
 
-This library generates a properties file as string as output from Java source files' Javadocs. It is implemented as 
-Doclet and to be used together with `javadoc`.
+This library uses a properties file and adds @Schema annotation to fields and classes with the description attribute 
+if this annotation is not yet present.
 
 # Features
 
-The library in its current state was created for getting a data model documentation of entities or DTOs for the 
-ALPS or JSON schema documentation used in [Spring Data REST API](https://docs.spring.io/spring-data/rest/docs/current/reference/html/#metadata.alps.descriptions). It is also useful for the
-[OpenAPI documentation (former Swagger)](https://github.com/OAI/OpenAPI-Specification/blob/master/versions/3.0.0.md) using 
-property files in the annotations, e.g. in ` ApiModelProperty` support by [SpringFox](https://springfox.github.io/springfox/).
-
-It is using the [Doclet API](https://docs.oracle.com/javase/6/docs/jdk/api/javadoc/doclet/index.html) internally.
+The library in its current state was created for setting the data model documentation of entities or DTOs.
 
 This is the first version and has the following limitations:
 
@@ -30,11 +25,11 @@ This is the first version and has the following limitations:
 ```
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-javadoc-plugin</artifactId>
+                <artifactId>maven-antrun</artifactId>
                 <version>3.1.0</version>
                 <executions>
                     <execution>
-                        <id>javadoc-test</id>
+                        <id>add-openapischema-description</id>
                         <goals>
                             <goal>jar</goal>
                         </goals>
