@@ -1,4 +1,4 @@
-package de.ohmesoftware.javadoctoopenapischema.model;
+package de.ohmesoftware.javadoctoopenapischema.model.subdir;
 
 /**
  * A user being able to log-in.

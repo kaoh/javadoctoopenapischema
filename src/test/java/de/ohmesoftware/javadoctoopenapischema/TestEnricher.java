@@ -1,15 +1,13 @@
 package de.ohmesoftware.javadoctoopenapischema;
 
-import de.ohmesoftware.javadoctoopenapischema.model.User;
+import de.ohmesoftware.javadoctoopenapischema.model.subdir.User;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.junit.After;
-import org.junit.Before;
 import org.junit.Test;
 
 import java.io.File;
 import java.io.FileReader;
-import java.io.FileWriter;
 import java.util.Collections;
 
 import static junit.framework.TestCase.assertEquals;
@@ -35,10 +33,12 @@ public class TestEnricher {
 
     @Test
     public void enrich() throws Exception {
-        Enricher enricher = new Enricher(buildPath(User.class.getPackage().getName()),
+        Enricher enricher = new Enricher(buildPath(User.class.getPackage().getName().substring(0,
+                User.class.getPackage().getName().lastIndexOf("."))),
                 Collections.singleton("**User.java"), Collections.singleton("**.bak"));
         enricher.enrich();
         String newContent = IOUtils.toString(new FileReader(new File(buildPath(User.class.getName())+".java")));
+        assertTrue(newContent.contains("package de.ohmesoftware.javadoctoopenapischema.model.subdir;"));
         assertTrue(newContent.contains("Schema("));
     }
 }

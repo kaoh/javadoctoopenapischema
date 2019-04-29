@@ -8,6 +8,8 @@ import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.NormalAnnotationExpr;
 import com.github.javaparser.javadoc.Javadoc;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.FileNotFoundException;
 import java.io.FileWriter;
@@ -26,11 +28,12 @@ import java.util.stream.Collectors;
  */
 public class Enricher {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(Enricher.class);
+
     private static final String SCHEMA_ANNOTATION_SIMPLE_NAME = "Schema";
     private static final String SCHEMA_ANNOTATION_CLASS = "io.swagger.v3.oas.annotations.media.Schema";
     private static final String EMPTY_STRING = "";
     private static final String SPACE_STRING = " ";
-    private static final String DOT_STRING = ".";
     private static final String INCLUDE_EXCLUDE_SEPARATOR = ",";
     private static final String QUOTATION_MARK_STRING = "\"";
     private static final String SCHEMA_DESCRIPTION = "description";
@@ -75,11 +78,11 @@ public class Enricher {
             System.exit(-1);
         }
         String sourcePath = parseOption(args, SOURCE_OPT, true, null);
-        String includes = parseOption(args, INCLUDES_OPT, false, EMPTY_STRING);
-        String excludes = parseOption(args, EXCLUDES_OPT, false, EMPTY_STRING);
+        String includes = parseOption(args, INCLUDES_OPT, false, null);
+        String excludes = parseOption(args, EXCLUDES_OPT, false, null);
         Enricher enricher = new Enricher(sourcePath,
-                Arrays.stream(includes.split(INCLUDE_EXCLUDE_SEPARATOR)).map(String::trim).collect(Collectors.toSet()),
-                Arrays.stream(excludes.split(INCLUDE_EXCLUDE_SEPARATOR)).map(String::trim).collect(Collectors.toSet())
+                includes == null ? null : Arrays.stream(includes.split(INCLUDE_EXCLUDE_SEPARATOR)).map(String::trim).collect(Collectors.toSet()),
+                excludes == null ? null : Arrays.stream(excludes.split(INCLUDE_EXCLUDE_SEPARATOR)).map(String::trim).collect(Collectors.toSet())
         );
         enricher.enrich();
     }
@@ -110,23 +113,27 @@ public class Enricher {
 
 
     public void enrich() {
+        LOGGER.info(String.format("Enriching source path '%s'", sourcePath));
         try {
             Files.walkFileTree(Paths.get(sourcePath), new SimpleFileVisitor<Path>() {
 
                 @Override
                 public FileVisitResult visitFile(Path path,
                                                  BasicFileAttributes attrs) throws IOException {
+                    LOGGER.debug(String.format("Checking file '%s' for inclusion / exclusion", path.getFileName().toString()));
                     if (includes != null && !includes.isEmpty()) {
                         boolean handle = false;
                         for (String include : includes) {
                             PathMatcher pathMatcher = FileSystems.getDefault().getPathMatcher(GLOB+include);
                             if (pathMatcher.matches(path) && path.toFile().isFile()) {
+                                LOGGER.debug(String.format("Included file: '%s'", path.getFileName().toString()));
                                 // handle
                                 handle = true;
                                 break;
                             }
                         }
                         if (!handle) {
+                            LOGGER.debug(String.format("Not included file: '%s'", path.getFileName().toString()));
                             return FileVisitResult.CONTINUE;
                         }
                     }
@@ -139,6 +146,7 @@ public class Enricher {
                                 if (path.toFile().isDirectory()) {
                                     return FileVisitResult.SKIP_SUBTREE;
                                 }
+                                LOGGER.debug(String.format("Excluded file: '%s'", path.getFileName().toString()));
                                 // ignore if excludes
                                 return FileVisitResult.CONTINUE;
                             }
@@ -151,10 +159,12 @@ public class Enricher {
 
                 @Override
                 public FileVisitResult visitFileFailed(Path file, IOException exc) {
+                    LOGGER.warn(String.format("Could not check file '%s'", file.getFileName().toString()));
                     return FileVisitResult.CONTINUE;
                 }
             });
         } catch (IOException e) {
+            LOGGER.error("Could not walk through source files.", e);
             throw new RuntimeException("Could not walk through source files.", e);
         }
     }
@@ -168,6 +178,7 @@ public class Enricher {
     }
 
     private void handleSchema(Path path) throws IOException {
+        LOGGER.info(String.format("Handling file: '%s'", path.getFileName().toString()));
         CompilationUnit compilationUnit;
         try {
             compilationUnit = JavaParser.parse(path.toFile());
@@ -183,7 +194,7 @@ public class Enricher {
                     this::addSchemaAnnotation
             );
             try (FileWriter fileWriter = new FileWriter(path.toFile())) {
-                fileWriter.write(classOrInterfaceDeclaration.toString());
+                fileWriter.write(compilationUnit.toString());
             }
         }
     }
