@@ -10,8 +10,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.util.Collections;
 
-import static junit.framework.TestCase.assertEquals;
-import static junit.framework.TestCase.assertTrue;
+import static junit.framework.TestCase.*;
 
 /**
  * Test.
@@ -40,5 +39,8 @@ public class TestEnricher {
         String newContent = IOUtils.toString(new FileReader(new File(buildPath(User.class.getName())+".java")));
         assertTrue(newContent.contains("package de.ohmesoftware.javadoctoopenapischema.model.subdir;"));
         assertTrue(newContent.contains("Schema("));
+        assertTrue(newContent.contains("Escape \\\"test\\\""));
+        assertTrue(newContent.contains("The email address. <p> Escape \\\"test\\\" </p>"));
+        assertFalse(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema()"));
     }
 }

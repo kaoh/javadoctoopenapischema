@@ -17,7 +17,11 @@ public class User {
     public String username;
     /**
      * The email address.
+     * <p>
+     *     Escape "test"
+     * </p>
      */
+    @io.swagger.v3.oas.annotations.media.Schema(description = "Test")
     public String emailAddress;
     /**
      * The password.

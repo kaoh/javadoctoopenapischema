@@ -6,6 +6,8 @@ import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.expr.AnnotationExpr;
+import com.github.javaparser.ast.expr.MemberValuePair;
+import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.NormalAnnotationExpr;
 import com.github.javaparser.javadoc.Javadoc;
 import org.slf4j.Logger;
@@ -124,7 +126,7 @@ public class Enricher {
                     if (includes != null && !includes.isEmpty()) {
                         boolean handle = false;
                         for (String include : includes) {
-                            PathMatcher pathMatcher = FileSystems.getDefault().getPathMatcher(GLOB+include);
+                            PathMatcher pathMatcher = FileSystems.getDefault().getPathMatcher(GLOB + include);
                             if (pathMatcher.matches(path) && path.toFile().isFile()) {
                                 LOGGER.debug(String.format("Included file: '%s'", path.getFileName().toString()));
                                 // handle
@@ -140,7 +142,7 @@ public class Enricher {
 
                     if (excludes != null && !excludes.isEmpty()) {
                         for (String exclude : excludes) {
-                            PathMatcher pathMatcher = FileSystems.getDefault().getPathMatcher(GLOB+exclude);
+                            PathMatcher pathMatcher = FileSystems.getDefault().getPathMatcher(GLOB + exclude);
                             if (pathMatcher.matches(path)) {
                                 // skip sub dirs if a directory
                                 if (path.toFile().isDirectory()) {
@@ -202,15 +204,28 @@ public class Enricher {
     private void addSchemaAnnotation(BodyDeclaration bodyDeclaration) {
         String description = getJavadoc(bodyDeclaration);
         if (description != null) {
-            AnnotationExpr annotationExpr = (AnnotationExpr) bodyDeclaration.getAnnotationByName(SCHEMA_ANNOTATION_SIMPLE_NAME).orElse(
-                    bodyDeclaration.addAndGetAnnotation(SCHEMA_ANNOTATION_CLASS));
-            ((NormalAnnotationExpr) annotationExpr).addPair(SCHEMA_DESCRIPTION,
-                    escapeString(description));
+            AnnotationExpr annotationExpr = (AnnotationExpr) bodyDeclaration.getAnnotationByName(SCHEMA_ANNOTATION_SIMPLE_NAME).orElse(null);
+            if (annotationExpr == null) {
+                annotationExpr = bodyDeclaration.addAndGetAnnotation(SCHEMA_ANNOTATION_CLASS);
+            }
+            Optional<MemberValuePair> memberValuePairOptional = (((NormalAnnotationExpr) annotationExpr).getPairs().stream().filter(
+                    a -> a.getName().getIdentifier().equals(SCHEMA_DESCRIPTION)
+            ).findFirst());
+            if (!memberValuePairOptional.isPresent()) {
+                ((NormalAnnotationExpr) annotationExpr).addPair(SCHEMA_DESCRIPTION,
+                        escapeString(description));
+            } else {
+                memberValuePairOptional.get().setValue(new NameExpr(escapeString(description)));
+            }
         }
     }
 
     private String escapeString(String string) {
-        return QUOTATION_MARK_STRING + string + QUOTATION_MARK_STRING;
+        return QUOTATION_MARK_STRING +
+                string.trim().replace("\n", SPACE_STRING).
+                replace("\r", EMPTY_STRING).
+                replace("\"",  "\\\"").
+        replaceAll("\\s+", SPACE_STRING) + QUOTATION_MARK_STRING;
     }
 
 }
