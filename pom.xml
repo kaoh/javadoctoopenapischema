@@ -8,7 +8,7 @@
 
     <description>Library and command line for scanning a source path and sub directories and adding or
         setting the "description" property of the Swagger OpenAPI @Schema annotation from the Javadoc.</description>
-    <url>https://github.com/kaoh/propertiestoopenapischema</url>
+    <url>https://github.com/kaoh/javadoctoopenapischema</url>
 
     <licenses>
         <license>
