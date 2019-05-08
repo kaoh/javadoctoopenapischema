@@ -5,10 +5,10 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.comments.Comment;
-import com.github.javaparser.ast.expr.AnnotationExpr;
+import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MemberValuePair;
-import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.NormalAnnotationExpr;
+import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.javadoc.Javadoc;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,8 +39,12 @@ public class Enricher {
     private static final String INCLUDE_EXCLUDE_SEPARATOR = ",";
     private static final String QUOTATION_MARK_STRING = "\"";
     private static final String SCHEMA_DESCRIPTION = "description";
+    private static final String SCHEMA_TITLE = "title";
 
     private static final String GLOB = "glob:";
+
+    private static final String PARAGRAPH_START = "<p>";
+    private static final String PARAGRAPH_END = "</p>";
 
     /**
      * The source path to enrich.
@@ -171,6 +175,26 @@ public class Enricher {
         }
     }
 
+    private String getJavadocSummary(String javadoc) {
+        String[] commentParts = javadoc.split(PARAGRAPH_START);
+        return commentParts[0].trim();
+    }
+
+    private String getJavadocDescription(String javadoc) {
+        String[] commentParts = javadoc.split(PARAGRAPH_START);
+        if (commentParts.length > 1) {
+            String description = commentParts[1].trim();
+            if (description.endsWith(PARAGRAPH_START)) {
+                description = description.substring(0, description.length() - PARAGRAPH_START.length());
+            }
+            if (description.endsWith(PARAGRAPH_END)) {
+                description = description.substring(0, description.length() - PARAGRAPH_END.length());
+            }
+            return description;
+        }
+        return null;
+    }
+
     private String getJavadoc(BodyDeclaration bodyDeclaration) {
         Javadoc javadoc = bodyDeclaration.getComment().filter(Comment::isJavadocComment).map(c -> c.asJavadocComment().parse()).orElse(null);
         if (javadoc != null) {
@@ -201,31 +225,49 @@ public class Enricher {
         }
     }
 
-    private void addSchemaAnnotation(BodyDeclaration bodyDeclaration) {
-        String description = getJavadoc(bodyDeclaration);
-        if (description != null) {
-            AnnotationExpr annotationExpr = (AnnotationExpr) bodyDeclaration.getAnnotationByName(SCHEMA_ANNOTATION_SIMPLE_NAME).orElse(null);
-            if (annotationExpr == null) {
-                annotationExpr = bodyDeclaration.addAndGetAnnotation(SCHEMA_ANNOTATION_CLASS);
+    private void setSchemaMemberValue(NormalAnnotationExpr annotationExpr, String schemaProperty, String value) {
+        Optional<MemberValuePair> memberValuePairOptional = (annotationExpr.getPairs().stream().filter(
+                a -> a.getName().getIdentifier().equals(schemaProperty)
+        ).findFirst());
+        if (!memberValuePairOptional.isPresent()) {
+            if (value != null) {
+                annotationExpr.addPair(schemaProperty,
+                        new StringLiteralExpr(escapeString(value)));
             }
-            Optional<MemberValuePair> memberValuePairOptional = (((NormalAnnotationExpr) annotationExpr).getPairs().stream().filter(
-                    a -> a.getName().getIdentifier().equals(SCHEMA_DESCRIPTION)
-            ).findFirst());
-            if (!memberValuePairOptional.isPresent()) {
-                ((NormalAnnotationExpr) annotationExpr).addPair(SCHEMA_DESCRIPTION,
-                        escapeString(description));
-            } else {
-                memberValuePairOptional.get().setValue(new NameExpr(escapeString(description)));
+        } else {
+            if (value != null) {
+                memberValuePairOptional.get().setValue(new StringLiteralExpr(escapeString(value)));
             }
         }
     }
 
-    private String escapeString(String string) {
-        return QUOTATION_MARK_STRING +
-                string.trim().replace("\n", SPACE_STRING).
+    private void addSchemaAnnotation(BodyDeclaration<?> bodyDeclaration) {
+        String javadoc = getJavadoc(bodyDeclaration);
+        if (javadoc == null) {
+            return;
+        }
+        String summary = getJavadocSummary(javadoc);
+        String description = getJavadocDescription(javadoc);
+        NormalAnnotationExpr annotationExpr = bodyDeclaration.getAnnotationByName(SCHEMA_ANNOTATION_SIMPLE_NAME).map(Expression::asNormalAnnotationExpr)
+                .orElse(null);
+        if (annotationExpr == null) {
+            annotationExpr = bodyDeclaration.addAndGetAnnotation(SCHEMA_ANNOTATION_CLASS).asNormalAnnotationExpr();
+        }
+        setSchemaMemberValue(annotationExpr, SCHEMA_DESCRIPTION, description);
+        setSchemaMemberValue(annotationExpr, SCHEMA_TITLE, summary);
+    }
+
+    protected String quoteString(String string) {
+        return QUOTATION_MARK_STRING + string + QUOTATION_MARK_STRING;
+    }
+
+    protected String escapeString(String string) {
+        return string.trim().replace("\n", SPACE_STRING).
                 replace("\r", EMPTY_STRING).
-                replace("\"",  "\\\"").
-        replaceAll("\\s+", SPACE_STRING) + QUOTATION_MARK_STRING;
+                replace("<", "&lt;").
+                replace(">", "&gt;").
+                replace("\"", "\\\"").
+                replaceAll("\\s+", SPACE_STRING);
     }
 
 }
