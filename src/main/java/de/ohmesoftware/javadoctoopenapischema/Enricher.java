@@ -29,6 +29,9 @@ import java.util.stream.Collectors;
  */
 public class Enricher {
 
+    private static final String SUMMARY = "No summary";
+    private static final String DESCRIPTION = "No description";
+
     private static final Logger LOGGER = LoggerFactory.getLogger(Enricher.class);
 
     private static final String SCHEMA_ANNOTATION_SIMPLE_NAME = "Schema";
@@ -56,6 +59,9 @@ public class Enricher {
     private static final String COLUMN_NULLABLE = "nullable";
     private static final String SIZE_ANNOTATION = "javax.validation.constraints.Size";
     private static final String NOT_NULL_ANNOTATION = "javax.validation.constraints.NotNull";
+    private static final String MIN_ANNOTATION = "javax.validation.constraints.Min";
+    private static final String MAX_ANNOTATION = "javax.validation.constraints.Max";
+    private static final String VALUE_PROP = "value";
     private static final String SIZE_MIN_PROP = "min";
     private static final String SIZE_MAX_PROP = "max";
 
@@ -281,11 +287,12 @@ public class Enricher {
 
     private void addSchemaAnnotation(BodyDeclaration<?> bodyDeclaration) {
         String javadoc = getJavadoc(bodyDeclaration);
-        if (javadoc == null) {
-            return;
+        String summary = SUMMARY;
+        String description = DESCRIPTION;
+        if (javadoc != null) {
+            summary = getJavadocSummary(javadoc);
+            description = getJavadocDescription(javadoc);
         }
-        String summary = getJavadocSummary(javadoc);
-        String description = getJavadocDescription(javadoc);
 
         NormalAnnotationExpr schemaAnnotationExpr = bodyDeclaration.getAnnotationByName(SCHEMA_ANNOTATION_SIMPLE_NAME).map(Expression::asNormalAnnotationExpr)
                 .orElse(null);
@@ -296,51 +303,68 @@ public class Enricher {
         setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_TITLE, summary);
 
         if (bodyDeclaration.isFieldDeclaration()) {
-            Type elementType = bodyDeclaration.asFieldDeclaration().getElementType();
+            Type elementType = bodyDeclaration.asFieldDeclaration().getCommonType();
             boolean required = false;
             int maxSize = -1;
             int minSize = -1;
-            AnnotationExpr annotationExpr = bodyDeclaration.getAnnotationByName(NOT_EMPTY_ANNOTATION).orElse(null);
+            int max = -1;
+            int min = -1;
+            AnnotationExpr annotationExpr = getAnnotation(bodyDeclaration, NOT_EMPTY_ANNOTATION);
             if (annotationExpr != null) {
                 required = true;
                 minSize = 1;
             }
-            annotationExpr = bodyDeclaration.getAnnotationByName(NOT_NULL_ANNOTATION).orElse(null);
+            annotationExpr = getAnnotation(bodyDeclaration, NOT_NULL_ANNOTATION);
             if (annotationExpr != null) {
                 required = true;
             }
 
-            NormalAnnotationExpr normalAnnotationExpr = bodyDeclaration.getAnnotationByName(COLUMN_ANNOTATION).map(Expression::asNormalAnnotationExpr)
-                    .orElse(null);
-            if (normalAnnotationExpr != null) {
-                for (MemberValuePair valuePair : normalAnnotationExpr.getPairs()) {
-                    if (valuePair.getName().asString().equals(COLUMN_NULLABLE)) {
-                        required = valuePair.getValue().asBooleanLiteralExpr().getValue();
-                    }
-                    if (valuePair.getName().asString().equals(COLUMN_LENGTH_PROP)) {
-                        maxSize = valuePair.getValue().asIntegerLiteralExpr().asInt();
-                    }
+            annotationExpr = getAnnotation(bodyDeclaration, MIN_ANNOTATION);
+            if (annotationExpr != null) {
+                Expression value = getAnnotationValue(annotationExpr, VALUE_PROP);
+                if (value != null) {
+                    min = value.asIntegerLiteralExpr().asInt();
                 }
             }
-            normalAnnotationExpr = bodyDeclaration.getAnnotationByName(SIZE_ANNOTATION).map(Expression::asNormalAnnotationExpr)
-                    .orElse(null);
-            if (normalAnnotationExpr != null) {
-                for (MemberValuePair valuePair : normalAnnotationExpr.getPairs()) {
-                    if (valuePair.getName().asString().equals(SIZE_MIN_PROP)) {
-                        minSize = valuePair.getValue().asIntegerLiteralExpr().asInt();
-                    }
-                    if (valuePair.getName().asString().equals(SIZE_MAX_PROP)) {
-                        maxSize = valuePair.getValue().asIntegerLiteralExpr().asInt();
-                    }
+            annotationExpr = getAnnotation(bodyDeclaration, MAX_ANNOTATION);
+            if (annotationExpr != null) {
+                Expression value = getAnnotationValue(annotationExpr, VALUE_PROP);
+                if (value != null) {
+                    max = value.asIntegerLiteralExpr().asInt();
+                }
+            }
+
+            annotationExpr = getAnnotation(bodyDeclaration, COLUMN_ANNOTATION);
+            if (annotationExpr != null) {
+                Expression nullable = getAnnotationValue(annotationExpr, COLUMN_NULLABLE);
+                if (nullable != null) {
+                    required = nullable.asBooleanLiteralExpr().getValue();
+                }
+                Expression length = getAnnotationValue(annotationExpr, COLUMN_LENGTH_PROP);
+                if (length != null) {
+                    maxSize = length.asIntegerLiteralExpr().asInt();
+                }
+            }
+            annotationExpr = getAnnotation(bodyDeclaration, SIZE_ANNOTATION);
+            if (annotationExpr != null) {
+                Expression value = getAnnotationValue(annotationExpr, SIZE_MIN_PROP);
+                if (value != null) {
+                    minSize = value.asIntegerLiteralExpr().asInt();
+                }
+
+                value = getAnnotationValue(annotationExpr, SIZE_MAX_PROP);
+                if (value != null) {
+                    maxSize = value.asIntegerLiteralExpr().asInt();
                 }
             }
 
             if (required) {
                 setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_REQUIRED, required);
             }
-            // length for String
-            if (elementType.asString().equals(String.class.getSimpleName())
-                    || elementType.asString().equals(Blob.class.getSimpleName())) {
+            // length for String, arrays, blobs
+            if (elementType.asString().endsWith(String.class.getSimpleName())
+                    || elementType.asString().endsWith(Blob.class.getSimpleName())
+                    || elementType.isArrayType()) {
                 if (minSize > -1) {
                     setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_MIN_LENGTH, minSize);
                 }
@@ -349,13 +373,40 @@ public class Enricher {
                 }
             } else {
                 if (minSize > -1) {
-                    setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_MIN, minSize);
+                    setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_MIN, "" + minSize + "");
                 }
                 if (maxSize > -1) {
-                    setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_MAX, maxSize);
+                    setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_MAX, "" + maxSize + "");
                 }
             }
+            if (max > -1) {
+                setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_MAX, "" + max + "");
+            }
+            if (min > -1) {
+                setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_MIN, "" + min + "");
+            }
         }
+    }
+
+
+    private Expression getAnnotationValue(AnnotationExpr annotationExpr, String property) {
+        if (annotationExpr.isNormalAnnotationExpr()) {
+            NormalAnnotationExpr normalAnnotationExpr = annotationExpr.asNormalAnnotationExpr();
+            for (MemberValuePair valuePair : normalAnnotationExpr.getPairs()) {
+                if (valuePair.getName().asString().equals(property)) {
+                    return valuePair.getValue();
+                }
+            }
+        } else if (annotationExpr.isSingleMemberAnnotationExpr()) {
+            return annotationExpr.asSingleMemberAnnotationExpr().getMemberValue();
+        }
+        return null;
+    }
+
+    private AnnotationExpr getAnnotation(BodyDeclaration<?> bodyDeclaration, String annotationClass) {
+        return bodyDeclaration.getAnnotationByName(annotationClass)
+                .orElse(bodyDeclaration.getAnnotationByName(
+                        annotationClass.substring(annotationClass.lastIndexOf('.') + 1)).orElse(null));
     }
 
     protected String quoteString(String string) {
