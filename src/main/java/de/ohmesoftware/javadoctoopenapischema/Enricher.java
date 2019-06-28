@@ -5,10 +5,8 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.comments.Comment;
-import com.github.javaparser.ast.expr.Expression;
-import com.github.javaparser.ast.expr.MemberValuePair;
-import com.github.javaparser.ast.expr.NormalAnnotationExpr;
-import com.github.javaparser.ast.expr.StringLiteralExpr;
+import com.github.javaparser.ast.expr.*;
+import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.javadoc.Javadoc;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,6 +16,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.sql.Blob;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -40,11 +39,26 @@ public class Enricher {
     private static final String QUOTATION_MARK_STRING = "\"";
     private static final String SCHEMA_DESCRIPTION = "description";
     private static final String SCHEMA_TITLE = "title";
+    private static final String SCHEMA_REQUIRED = "required";
+    private static final String SCHEMA_MAX_LENGTH = "maxLength";
+    private static final String SCHEMA_MIN_LENGTH = "minLength";
+    private static final String SCHEMA_MAX = "maximum";
+    private static final String SCHEMA_MIN = "minimum";
 
     private static final String GLOB = "glob:";
 
     private static final String PARAGRAPH_START = "<p>";
     private static final String PARAGRAPH_END = "</p>";
+
+    private static final String NOT_EMPTY_ANNOTATION = "javax.validation.constraints.NotEmpty";
+    private static final String COLUMN_ANNOTATION = "javax.persistence.Column";
+    private static final String COLUMN_LENGTH_PROP = "length";
+    private static final String COLUMN_NULLABLE = "nullable";
+    private static final String SIZE_ANNOTATION = "javax.validation.constraints.Size";
+    private static final String NOT_NULL_ANNOTATION = "javax.validation.constraints.NotNull";
+    private static final String SIZE_MIN_PROP = "min";
+    private static final String SIZE_MAX_PROP = "max";
+
 
     /**
      * The source path to enrich.
@@ -225,6 +239,30 @@ public class Enricher {
         }
     }
 
+    private void setSchemaMemberValue(NormalAnnotationExpr annotationExpr, String schemaProperty, boolean value) {
+        Optional<MemberValuePair> memberValuePairOptional = (annotationExpr.getPairs().stream().filter(
+                a -> a.getName().getIdentifier().equals(schemaProperty)
+        ).findFirst());
+        if (!memberValuePairOptional.isPresent()) {
+            annotationExpr.addPair(schemaProperty,
+                    new BooleanLiteralExpr(value));
+        } else {
+            memberValuePairOptional.get().setValue(new BooleanLiteralExpr(value));
+        }
+    }
+
+    private void setSchemaMemberValue(NormalAnnotationExpr annotationExpr, String schemaProperty, int value) {
+        Optional<MemberValuePair> memberValuePairOptional = (annotationExpr.getPairs().stream().filter(
+                a -> a.getName().getIdentifier().equals(schemaProperty)
+        ).findFirst());
+        if (!memberValuePairOptional.isPresent()) {
+            annotationExpr.addPair(schemaProperty,
+                    new IntegerLiteralExpr(value));
+        } else {
+            memberValuePairOptional.get().setValue(new IntegerLiteralExpr(value));
+        }
+    }
+
     private void setSchemaMemberValue(NormalAnnotationExpr annotationExpr, String schemaProperty, String value) {
         Optional<MemberValuePair> memberValuePairOptional = (annotationExpr.getPairs().stream().filter(
                 a -> a.getName().getIdentifier().equals(schemaProperty)
@@ -248,13 +286,76 @@ public class Enricher {
         }
         String summary = getJavadocSummary(javadoc);
         String description = getJavadocDescription(javadoc);
-        NormalAnnotationExpr annotationExpr = bodyDeclaration.getAnnotationByName(SCHEMA_ANNOTATION_SIMPLE_NAME).map(Expression::asNormalAnnotationExpr)
+
+        NormalAnnotationExpr schemaAnnotationExpr = bodyDeclaration.getAnnotationByName(SCHEMA_ANNOTATION_SIMPLE_NAME).map(Expression::asNormalAnnotationExpr)
                 .orElse(null);
-        if (annotationExpr == null) {
-            annotationExpr = bodyDeclaration.addAndGetAnnotation(SCHEMA_ANNOTATION_CLASS).asNormalAnnotationExpr();
+        if (schemaAnnotationExpr == null) {
+            schemaAnnotationExpr = bodyDeclaration.addAndGetAnnotation(SCHEMA_ANNOTATION_CLASS).asNormalAnnotationExpr();
         }
-        setSchemaMemberValue(annotationExpr, SCHEMA_DESCRIPTION, description);
-        setSchemaMemberValue(annotationExpr, SCHEMA_TITLE, summary);
+        setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_DESCRIPTION, description);
+        setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_TITLE, summary);
+
+        if (bodyDeclaration.isFieldDeclaration()) {
+            Type elementType = bodyDeclaration.asFieldDeclaration().getElementType();
+            boolean required = false;
+            int maxSize = -1;
+            int minSize = -1;
+            AnnotationExpr annotationExpr = bodyDeclaration.getAnnotationByName(NOT_EMPTY_ANNOTATION).orElse(null);
+            if (annotationExpr != null) {
+                required = true;
+                minSize = 1;
+            }
+            annotationExpr = bodyDeclaration.getAnnotationByName(NOT_NULL_ANNOTATION).orElse(null);
+            if (annotationExpr != null) {
+                required = true;
+            }
+
+            NormalAnnotationExpr normalAnnotationExpr = bodyDeclaration.getAnnotationByName(COLUMN_ANNOTATION).map(Expression::asNormalAnnotationExpr)
+                    .orElse(null);
+            if (normalAnnotationExpr != null) {
+                for (MemberValuePair valuePair : normalAnnotationExpr.getPairs()) {
+                    if (valuePair.getName().asString().equals(COLUMN_NULLABLE)) {
+                        required = valuePair.getValue().asBooleanLiteralExpr().getValue();
+                    }
+                    if (valuePair.getName().asString().equals(COLUMN_LENGTH_PROP)) {
+                        maxSize = valuePair.getValue().asIntegerLiteralExpr().asInt();
+                    }
+                }
+            }
+            normalAnnotationExpr = bodyDeclaration.getAnnotationByName(SIZE_ANNOTATION).map(Expression::asNormalAnnotationExpr)
+                    .orElse(null);
+            if (normalAnnotationExpr != null) {
+                for (MemberValuePair valuePair : normalAnnotationExpr.getPairs()) {
+                    if (valuePair.getName().asString().equals(SIZE_MIN_PROP)) {
+                        minSize = valuePair.getValue().asIntegerLiteralExpr().asInt();
+                    }
+                    if (valuePair.getName().asString().equals(SIZE_MAX_PROP)) {
+                        maxSize = valuePair.getValue().asIntegerLiteralExpr().asInt();
+                    }
+                }
+            }
+
+            if (required) {
+                setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_REQUIRED, required);
+            }
+            // length for String
+            if (elementType.asString().equals(String.class.getSimpleName())
+                    || elementType.asString().equals(Blob.class.getSimpleName())) {
+                if (minSize > -1) {
+                    setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_MIN_LENGTH, minSize);
+                }
+                if (maxSize > -1) {
+                    setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_MAX_LENGTH, maxSize);
+                }
+            } else {
+                if (minSize > -1) {
+                    setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_MIN, minSize);
+                }
+                if (maxSize > -1) {
+                    setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_MAX, maxSize);
+                }
+            }
+        }
     }
 
     protected String quoteString(String string) {
