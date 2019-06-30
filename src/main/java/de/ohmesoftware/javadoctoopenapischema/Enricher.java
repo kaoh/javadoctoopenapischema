@@ -73,6 +73,8 @@ public class Enricher {
     private static final String SIZE_MIN_PROP = "min";
     private static final String SIZE_MAX_PROP = "max";
 
+    private static final String EMBEDDABLE_ANNOTATION = "javax.persistence.Embeddable";
+
     private static final String EXCLUDES_OPT = "-excludes";
     private static final String INCLUDES_OPT = "-includes";
     private static final String SOURCE_OPT = "-sourcePath";
@@ -354,8 +356,6 @@ public class Enricher {
             case "Date":
             case "Boolean":
                 return String.class.getPackage().getName() + DOT + className;
-            case "Optional":
-                return Optional.class.getPackage().getName() + DOT + className;
         }
         return compilationUnit.getImports().stream().filter(i -> !i.isAsterisk() && i.getName().getIdentifier().equals(className)).
                 map(i -> i.getName().asString()).findFirst().orElse(
@@ -386,6 +386,20 @@ public class Enricher {
         return newClassOrInterfaceDeclaration;
     }
 
+    private boolean isEmbedded(String basePath, CompilationUnit compilationUnit, Type propertyClassOrInterfaceType) {
+        if (!propertyClassOrInterfaceType.isClassOrInterfaceType()) {
+            return false;
+        }
+        if (isPrimitive(propertyClassOrInterfaceType.asClassOrInterfaceType())) {
+            return false;
+        }
+        TypeDeclaration extendTypeDeclaration = parseClassOrInterfaceType(basePath, compilationUnit,
+                propertyClassOrInterfaceType.asClassOrInterfaceType());
+        boolean isEmbedded =  extendTypeDeclaration.isAnnotationPresent(EMBEDDABLE_ANNOTATION)
+                || extendTypeDeclaration.isAnnotationPresent(getSimpleNameFromClass(EMBEDDABLE_ANNOTATION));
+        return isEmbedded;
+    }
+
     private boolean isEnumProperty(String basePath, CompilationUnit compilationUnit, Type propertyClassOrInterfaceType) {
         if (!propertyClassOrInterfaceType.isClassOrInterfaceType()) {
             return false;
@@ -400,10 +414,7 @@ public class Enricher {
         return packages[packages.length - 1];
     }
 
-    private boolean isSimpleType(String basePath, CompilationUnit compilationUnit, Type type) {
-        if (type.isArrayType() || isCollection(type)) {
-            return false;
-        }
+    private boolean isPrimitive(Type type) {
         if (type.isPrimitiveType()) {
             return true;
         }
@@ -424,6 +435,19 @@ public class Enricher {
                     return true;
             }
         }
+        return false;
+    }
+
+    private boolean isSimpleType(String basePath, CompilationUnit compilationUnit, Type type) {
+        if (type.isArrayType() || isCollection(type)) {
+            return false;
+        }
+        if (isEmbedded(basePath, compilationUnit, type)) {
+            return true;
+        }
+        if (isPrimitive(type)) {
+            return true;
+        }
         if (isEnumProperty(basePath, compilationUnit, type)) {
             return true;
         }
@@ -433,6 +457,7 @@ public class Enricher {
     private boolean isNotPrimitiveArray(String basePath, CompilationUnit compilationUnit, FieldDeclaration fieldDeclaration) {
         return (fieldDeclaration.getCommonType().isArrayType()
                 && fieldDeclaration.getElementType() != null
+                && !isEmbedded(basePath, compilationUnit, fieldDeclaration.getElementType())
                 && !isSimpleType(basePath, compilationUnit, fieldDeclaration.getElementType()));
     }
 
@@ -451,9 +476,11 @@ public class Enricher {
     private boolean isNotPrimitiveCollection(String basePath, CompilationUnit compilationUnit,
                                              FieldDeclaration fieldDeclaration) {
         Type commonType = fieldDeclaration.getCommonType();
-        return isCollection(commonType) && commonType.isClassOrInterfaceType() &&
-                            commonType.asClassOrInterfaceType().getTypeArguments().isPresent() &&
-                            !isSimpleType(basePath, compilationUnit, commonType.asClassOrInterfaceType().getTypeArguments().get().get(0));
+        boolean nonPrimitive = isCollection(commonType) && commonType.isClassOrInterfaceType() &&
+                commonType.asClassOrInterfaceType().getTypeArguments().isPresent() &&
+                !isEmbedded(basePath, compilationUnit, commonType.asClassOrInterfaceType().getTypeArguments().get().get(0)) &&
+                !isSimpleType(basePath, compilationUnit, commonType.asClassOrInterfaceType().getTypeArguments().get().get(0));
+        return nonPrimitive;
     }
 
     private void addSchemaAnnotation(String basePath, CompilationUnit compilationUnit,
@@ -475,7 +502,7 @@ public class Enricher {
 
             if ((notPrimitiveArray || notPrimitiveCollection) ||
                     (!isSimpleType(basePath, compilationUnit, commonType) &&
-                            !fieldDeclaration.getCommonType().isArrayType() && !isCollection(fieldDeclaration.getCommonType()) )) {
+                            !fieldDeclaration.getCommonType().isArrayType() && !isCollection(fieldDeclaration.getCommonType()))) {
                 if (notPrimitiveArray || notPrimitiveCollection) {
                     summary = String.format("URIs to the resource associations: %s", summary);
                     description = String.format("For the resource creation with `POST` this attribute is an array of URIs to the associated resources. " +
@@ -483,8 +510,7 @@ public class Enricher {
                                     "this attribute of the same name is included in the `_links` section as `\"_links\": { \"%s\": { \"href\": \"First Resource URI\", \"href\": \"Second Resource URI\"} } ` section containing the array with the URIs to the associated resources. " +
                                     "The associated resources can be updated with a `PUT` call with `Content-Type: text/uri-list` and a list with URIs to the updated associated resources.",
                             fieldname);
-                }
-                else {
+                } else {
                     summary = String.format("URI to the resource association: %s", summary);
                     description = String.format("For the resource creation with `POST` this attribute is an URI to the associated resource. " +
                                     "For a `GET` operation on the item or collection resource " +

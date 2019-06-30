@@ -29,4 +29,7 @@ public class Foo {
      * Multiple bars.
      */
     public Set<Bar> bars;
+
+    public Set<Embeddable> embeddables;
+
 }
