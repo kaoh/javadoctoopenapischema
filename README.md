@@ -8,9 +8,16 @@ setting the `description` property of the Swagger OpenAPI
 
 The library in its current state was created for setting the data model documentation of entities or DTOs.
 
-This is the first version and has the following limitations:
+Supported:
+
+ * Javadoc parsing for summary and description
+ * Min, Max, Size, Column, NotEmpty, NotNull annotations
+ * HATEAOS URI descriptions
+
+Limitations:
 
 * No methods are scanned only fields and the class is annotated
+* No internal enums are found.
 
 # Usage
 

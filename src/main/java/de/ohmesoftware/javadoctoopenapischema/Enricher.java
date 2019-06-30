@@ -123,6 +123,13 @@ public class Enricher {
     }
 
     private static String getBaseSourcePath(CompilationUnit compilationUnit, String sourcePath) {
+        // normalize to unix path separators
+        sourcePath = sourcePath.replace('\\', '/');
+        // remove file at and
+        if (sourcePath.endsWith(JAVA_EXT)) {
+            sourcePath = sourcePath.substring(0, sourcePath.lastIndexOf('/'));
+        }
+
         String _package = compilationUnit.getPackageDeclaration().map(p -> p.getName().asString()).orElse(EMPTY_STRING);
         String packagePath = _package.replace(".", SLASH);
         int overlap = 0;
@@ -394,7 +401,10 @@ public class Enricher {
     }
 
     private boolean isSimpleType(String basePath, CompilationUnit compilationUnit, Type type) {
-        if (type.isPrimitiveType() || isEnumProperty(basePath, compilationUnit, type)) {
+        if (type.isArrayType() || isCollection(type)) {
+            return false;
+        }
+        if (type.isPrimitiveType()) {
             return true;
         }
         if (type.isClassOrInterfaceType()) {
@@ -407,17 +417,43 @@ public class Enricher {
                 case "Float":
                 case "Byte":
                 case "Short":
+                case "BigInteger":
+                case "BigDecimal":
+                case "Long":
                 case "Calendar":
+                    return true;
+            }
+        }
+        if (isEnumProperty(basePath, compilationUnit, type)) {
+            return true;
+        }
+        return false;
+    }
+
+    private boolean isNotPrimitiveArray(String basePath, CompilationUnit compilationUnit, FieldDeclaration fieldDeclaration) {
+        return (fieldDeclaration.getCommonType().isArrayType()
+                && fieldDeclaration.getElementType() != null
+                && !isSimpleType(basePath, compilationUnit, fieldDeclaration.getElementType()));
+    }
+
+    private boolean isCollection(Type type) {
+        if (type.isClassOrInterfaceType()) {
+            switch (getSimpleNameFromClass(type.asClassOrInterfaceType().getName().asString())) {
+                case "Set":
+                case "List":
+                case "Collection":
                     return true;
             }
         }
         return false;
     }
 
-    private boolean isByteArray(FieldDeclaration fieldDeclaration) {
-        return (fieldDeclaration.getCommonType().isArrayType()
-                && fieldDeclaration.getElementType() != null
-                && fieldDeclaration.getElementType().isPrimitiveType());
+    private boolean isNotPrimitiveCollection(String basePath, CompilationUnit compilationUnit,
+                                             FieldDeclaration fieldDeclaration) {
+        Type commonType = fieldDeclaration.getCommonType();
+        return isCollection(commonType) && commonType.isClassOrInterfaceType() &&
+                            commonType.asClassOrInterfaceType().getTypeArguments().isPresent() &&
+                            !isSimpleType(basePath, compilationUnit, commonType.asClassOrInterfaceType().getTypeArguments().get().get(0));
     }
 
     private void addSchemaAnnotation(String basePath, CompilationUnit compilationUnit,
@@ -429,16 +465,34 @@ public class Enricher {
             summary = getJavadocSummary(javadoc);
             description = getJavadocDescription(javadoc);
         }
-        if (bodyDeclaration.isFieldDeclaration()) {
+        if (hateaos && bodyDeclaration.isFieldDeclaration()) {
             FieldDeclaration fieldDeclaration = bodyDeclaration.asFieldDeclaration();
             Type commonType = fieldDeclaration.getCommonType();
-            String fieldname = fieldDeclaration.toString();
+            String fieldname = fieldDeclaration.getVariable(0).getNameAsString();
 
-            if (!isSimpleType(basePath, compilationUnit, commonType) && !isByteArray(fieldDeclaration)) {
-                summary = String.format("URI for %s", SUMMARY);
-                description = String.format("For the resource creation with POST this is an URI/are URIs to the associated resource(s). For GET operation on the item or collection resource " +
-                                "this attribute is not included in the `\"_links\": { \"%s\": { \"href\": \"<Resource URI to %s>\"} } ` ",
-                        fieldname, fieldname);
+            boolean notPrimitiveArray = isNotPrimitiveArray(basePath, compilationUnit, fieldDeclaration);
+            boolean notPrimitiveCollection = isNotPrimitiveCollection(basePath, compilationUnit, fieldDeclaration);
+
+            if ((notPrimitiveArray || notPrimitiveCollection) ||
+                    (!isSimpleType(basePath, compilationUnit, commonType) &&
+                            !fieldDeclaration.getCommonType().isArrayType() && !isCollection(fieldDeclaration.getCommonType()) )) {
+                if (notPrimitiveArray || notPrimitiveCollection) {
+                    summary = String.format("URIs to the resource associations: %s", summary);
+                    description = String.format("For the resource creation with `POST` this attribute is an array of URIs to the associated resources. " +
+                                    "For a `GET` operation on the item or collection resource " +
+                                    "this attribute of the same name is included in the `_links` section as `\"_links\": { \"%s\": { \"href\": \"First Resource URI\", \"href\": \"Second Resource URI\"} } ` section containing the array with the URIs to the associated resources. " +
+                                    "The associated resources can be updated with a `PUT` call with `Content-Type: text/uri-list` and a list with URIs to the updated associated resources.",
+                            fieldname);
+                }
+                else {
+                    summary = String.format("URI to the resource association: %s", summary);
+                    description = String.format("For the resource creation with `POST` this attribute is an URI to the associated resource. " +
+                                    "For a `GET` operation on the item or collection resource " +
+                                    "this attribute of the same name is included in the `_links` section as `\"_links\": { \"%s\": { \"href\": \"Resource URI\"} } `. " +
+                                    "The associated resource can be updated with a `PUT` call with `Content-Type: text/uri-list` and the single URI to the updated associated resource.",
+                            fieldname);
+                }
+
             }
         }
 
