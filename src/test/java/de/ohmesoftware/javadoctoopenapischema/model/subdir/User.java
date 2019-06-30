@@ -15,6 +15,10 @@ import javax.validation.constraints.*;
  */
 public class User {
 
+    @Column(length = 64, updatable = false)
+    @Size(min = 36)
+    public String dbId;
+
     /**
      * The username.
      */

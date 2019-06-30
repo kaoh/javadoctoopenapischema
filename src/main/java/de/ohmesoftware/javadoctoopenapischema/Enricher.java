@@ -4,13 +4,17 @@ import com.github.javaparser.JavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.FieldDeclaration;
+import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.expr.*;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.javadoc.Javadoc;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -33,6 +37,10 @@ public class Enricher {
     private static final String DESCRIPTION = "No description";
 
     private static final Logger LOGGER = LoggerFactory.getLogger(Enricher.class);
+
+    private static final String JAVA_EXT = ".java";
+    private static final String DOT = ".";
+    private static final String SLASH = "/";
 
     private static final String SCHEMA_ANNOTATION_SIMPLE_NAME = "Schema";
     private static final String SCHEMA_ANNOTATION_CLASS = "io.swagger.v3.oas.annotations.media.Schema";
@@ -65,6 +73,10 @@ public class Enricher {
     private static final String SIZE_MIN_PROP = "min";
     private static final String SIZE_MAX_PROP = "max";
 
+    private static final String EXCLUDES_OPT = "-excludes";
+    private static final String INCLUDES_OPT = "-includes";
+    private static final String SOURCE_OPT = "-sourcePath";
+    private static final String HATEAOS_OPT = "-hateaos";
 
     /**
      * The source path to enrich.
@@ -82,21 +94,46 @@ public class Enricher {
     private Set<String> excludes;
 
     /**
+     * <code>true</code> if HATEAOS is used.
+     */
+    private boolean hateaos;
+
+    /**
      * Constructor.
      *
      * @param sourcePath The source path to enrich.
      * @param includes   The includes.
      * @param excludes   The excludes.
+     * @param hateaos    <code>true</code> if HATEAOS is used. In this case associations are rendered as links.
      */
-    public Enricher(String sourcePath, Set<String> includes, Set<String> excludes) {
+    public Enricher(String sourcePath, Set<String> includes, Set<String> excludes, boolean hateaos) {
         this.sourcePath = sourcePath;
         this.includes = includes;
         this.excludes = excludes;
+        this.hateaos = hateaos;
     }
 
-    private static final String EXCLUDES_OPT = "-excludes";
-    private static final String INCLUDES_OPT = "-includes";
-    private static final String SOURCE_OPT = "-sourcePath";
+
+    private static CompilationUnit parseFile(File file) {
+        try {
+            return JavaParser.parse(file);
+        } catch (FileNotFoundException e) {
+            throw new RuntimeException(String.format("Could not find file: %s", file), e);
+        }
+    }
+
+    private static String getBaseSourcePath(CompilationUnit compilationUnit, String sourcePath) {
+        String _package = compilationUnit.getPackageDeclaration().map(p -> p.getName().asString()).orElse(EMPTY_STRING);
+        String packagePath = _package.replace(".", SLASH);
+        int overlap = 0;
+        for (int i = packagePath.length(); i >= 0; i--) {
+            if (sourcePath.endsWith(packagePath.substring(0, i))) {
+                overlap = i;
+                break;
+            }
+        }
+        return sourcePath.substring(0, sourcePath.length() - overlap);
+    }
 
     public static void main(String[] args) {
         if (args == null || args.length == 0) {
@@ -106,11 +143,21 @@ public class Enricher {
         String sourcePath = parseOption(args, SOURCE_OPT, true, null);
         String includes = parseOption(args, INCLUDES_OPT, false, null);
         String excludes = parseOption(args, EXCLUDES_OPT, false, null);
+        boolean hateaos = parseFlag(args, HATEAOS_OPT);
         Enricher enricher = new Enricher(sourcePath,
                 includes == null ? null : Arrays.stream(includes.split(INCLUDE_EXCLUDE_SEPARATOR)).map(String::trim).collect(Collectors.toSet()),
-                excludes == null ? null : Arrays.stream(excludes.split(INCLUDE_EXCLUDE_SEPARATOR)).map(String::trim).collect(Collectors.toSet())
+                excludes == null ? null : Arrays.stream(excludes.split(INCLUDE_EXCLUDE_SEPARATOR)).map(String::trim).collect(Collectors.toSet()),
+                hateaos
         );
         enricher.enrich();
+    }
+
+    private static boolean parseFlag(String[] args, String option) {
+        Optional<String> optionArg = Arrays.stream(args).filter(s -> s.equals(option)).findFirst();
+        if (!optionArg.isPresent()) {
+            return false;
+        }
+        return true;
     }
 
     private static String parseOption(String[] args, String option, boolean required,
@@ -136,7 +183,6 @@ public class Enricher {
         }
         return _default;
     }
-
 
     public void enrich() {
         LOGGER.info(String.format("Enriching source path '%s'", sourcePath));
@@ -231,13 +277,15 @@ public class Enricher {
         } catch (FileNotFoundException e) {
             throw new RuntimeException("Could not find file.", e);
         }
+        String basePath = getBaseSourcePath(compilationUnit, path.toString());
+
         List<ClassOrInterfaceDeclaration> classOrInterfaceDeclarations = new ArrayList<>(compilationUnit.
                 findAll(ClassOrInterfaceDeclaration.class));
 
         for (ClassOrInterfaceDeclaration classOrInterfaceDeclaration : classOrInterfaceDeclarations) {
-            addSchemaAnnotation(classOrInterfaceDeclaration);
+            addSchemaAnnotation(basePath, compilationUnit, classOrInterfaceDeclaration);
             classOrInterfaceDeclaration.getFields().forEach(
-                    this::addSchemaAnnotation
+                    f -> addSchemaAnnotation(basePath, compilationUnit, f)
             );
             try (FileWriter fileWriter = new FileWriter(path.toFile())) {
                 fileWriter.write(compilationUnit.toString());
@@ -285,13 +333,113 @@ public class Enricher {
         }
     }
 
-    private void addSchemaAnnotation(BodyDeclaration<?> bodyDeclaration) {
+    private String getFullClassName(CompilationUnit compilationUnit,
+                                    String className) {
+        if (className.contains(DOT)) {
+            return className;
+        }
+        switch (className) {
+            case "String":
+            case "Long":
+            case "Integer":
+            case "Double":
+            case "Float":
+            case "Date":
+            case "Boolean":
+                return String.class.getPackage().getName() + DOT + className;
+            case "Optional":
+                return Optional.class.getPackage().getName() + DOT + className;
+        }
+        return compilationUnit.getImports().stream().filter(i -> !i.isAsterisk() && i.getName().getIdentifier().equals(className)).
+                map(i -> i.getName().asString()).findFirst().orElse(
+                compilationUnit.getPackageDeclaration().map(p -> p.getName().asString() + DOT + className).
+                        orElseThrow(
+                                () -> new RuntimeException(
+                                        String.format("Could not resolve import for type: %s", className))
+                        ));
+    }
+
+    private String getFullClassName(CompilationUnit compilationUnit, ClassOrInterfaceType extent) {
+        return getFullClassName(compilationUnit, extent.getNameAsString());
+    }
+
+    private File getSourceFile(String basePath, CompilationUnit compilationUnit, ClassOrInterfaceType extent) {
+        String className = getFullClassName(compilationUnit, extent);
+        // get File
+        String sourcePath = basePath + className.replace('.', '/') + JAVA_EXT;
+        return new File(sourcePath);
+    }
+
+    protected TypeDeclaration parseClassOrInterfaceType(String basePath, CompilationUnit compilationUnit, ClassOrInterfaceType classOrInterfaceType) {
+
+        CompilationUnit newCompilationUnit = parseFile(getSourceFile(basePath, compilationUnit, classOrInterfaceType));
+        TypeDeclaration newClassOrInterfaceDeclaration = newCompilationUnit.findFirst(TypeDeclaration.class).
+                orElseThrow(() -> new RuntimeException(
+                        String.format("Could not parse type: %s", classOrInterfaceType.asString())));
+        return newClassOrInterfaceDeclaration;
+    }
+
+    private boolean isEnumProperty(String basePath, CompilationUnit compilationUnit, Type propertyClassOrInterfaceType) {
+        if (!propertyClassOrInterfaceType.isClassOrInterfaceType()) {
+            return false;
+        }
+        TypeDeclaration extendTypeDeclaration = parseClassOrInterfaceType(basePath, compilationUnit,
+                propertyClassOrInterfaceType.asClassOrInterfaceType());
+        return extendTypeDeclaration.isEnumDeclaration();
+    }
+
+    private String getSimpleNameFromClass(String fqClassName) {
+        String[] packages = fqClassName.split("\\.");
+        return packages[packages.length - 1];
+    }
+
+    private boolean isSimpleType(String basePath, CompilationUnit compilationUnit, Type type) {
+        if (type.isPrimitiveType() || isEnumProperty(basePath, compilationUnit, type)) {
+            return true;
+        }
+        if (type.isClassOrInterfaceType()) {
+            switch (getSimpleNameFromClass(type.asClassOrInterfaceType().getName().asString())) {
+                case "String":
+                case "Double":
+                case "Integer":
+                case "Blob":
+                case "Date":
+                case "Float":
+                case "Byte":
+                case "Short":
+                case "Calendar":
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isByteArray(FieldDeclaration fieldDeclaration) {
+        return (fieldDeclaration.getCommonType().isArrayType()
+                && fieldDeclaration.getElementType() != null
+                && fieldDeclaration.getElementType().isPrimitiveType());
+    }
+
+    private void addSchemaAnnotation(String basePath, CompilationUnit compilationUnit,
+                                     BodyDeclaration<?> bodyDeclaration) {
         String javadoc = getJavadoc(bodyDeclaration);
         String summary = SUMMARY;
         String description = DESCRIPTION;
         if (javadoc != null) {
             summary = getJavadocSummary(javadoc);
             description = getJavadocDescription(javadoc);
+        }
+        if (bodyDeclaration.isFieldDeclaration()) {
+            FieldDeclaration fieldDeclaration = bodyDeclaration.asFieldDeclaration();
+            Type commonType = fieldDeclaration.getCommonType();
+            String fieldname = fieldDeclaration.toString();
+
+            if (!isSimpleType(basePath, compilationUnit, commonType) && !isByteArray(fieldDeclaration)) {
+                summary = String.format("URI for %s", SUMMARY);
+                description = String.format("For the resource creation with POST this is an URI/are URIs to the associated resource(s). For GET operation on the item or collection resource " +
+                                "this attribute is not included in the `\"_links\": { \"%s\": { \"href\": \"<Resource URI to %s>\"} } ` ",
+                        fieldname, fieldname);
+            }
         }
 
         NormalAnnotationExpr schemaAnnotationExpr = bodyDeclaration.getAnnotationByName(SCHEMA_ANNOTATION_SIMPLE_NAME).map(Expression::asNormalAnnotationExpr)
@@ -303,7 +451,7 @@ public class Enricher {
         setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_TITLE, summary);
 
         if (bodyDeclaration.isFieldDeclaration()) {
-            Type elementType = bodyDeclaration.asFieldDeclaration().getCommonType();
+            Type commonType = bodyDeclaration.asFieldDeclaration().getCommonType();
             boolean required = false;
             int maxSize = -1;
             int minSize = -1;
@@ -362,9 +510,9 @@ public class Enricher {
                 setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_REQUIRED, required);
             }
             // length for String, arrays, blobs
-            if (elementType.asString().endsWith(String.class.getSimpleName())
-                    || elementType.asString().endsWith(Blob.class.getSimpleName())
-                    || elementType.isArrayType()) {
+            if (commonType.asString().endsWith(String.class.getSimpleName())
+                    || commonType.asString().endsWith(Blob.class.getSimpleName())
+                    || commonType.isArrayType()) {
                 if (minSize > -1) {
                     setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_MIN_LENGTH, minSize);
                 }
