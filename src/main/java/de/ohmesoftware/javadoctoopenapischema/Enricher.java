@@ -492,6 +492,9 @@ public class Enricher {
             summary = getJavadocSummary(javadoc);
             description = getJavadocDescription(javadoc);
         }
+        if (description == null) {
+            description = summary;
+        }
         if (hateaos && bodyDeclaration.isFieldDeclaration()) {
             FieldDeclaration fieldDeclaration = bodyDeclaration.asFieldDeclaration();
             Type commonType = fieldDeclaration.getCommonType();

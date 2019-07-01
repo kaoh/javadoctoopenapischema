@@ -42,7 +42,7 @@ public class TestEnricher {
         String newContent = IOUtils.toString(new FileReader(new File(buildPath(User.class.getName())+".java")));
         assertTrue(newContent.contains("package de.ohmesoftware.javadoctoopenapischema.model.subdir;"));
         assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(description = \"No description\", title = \"No summary\")"));
-        assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(title = \"The username.\", required = true, minLength = 1)"));
+        assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(description = \"The username.\", title = \"The username.\", required = true, minLength = 1)"));
         assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(description = \"No description\", title = \"No summary\", minLength = 2, maxLength = 64)"));
         assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(description = \"No description\", title = \"No summary\", required = true)"));
         assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(description = \"Escape \\\"test\\\"\", title = \"The email address.\")"));
