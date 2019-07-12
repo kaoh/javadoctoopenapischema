@@ -41,13 +41,15 @@ public class TestEnricher {
         enricher.enrich();
         String newContent = IOUtils.toString(new FileReader(new File(buildPath(User.class.getName())+".java")));
         assertTrue(newContent.contains("package de.ohmesoftware.javadoctoopenapischema.model.subdir;"));
-        assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(description = \"No description\", title = \"No summary\")"));
+        assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(description = \"No summary. No description.\", title = \"No summary.\")"));
         assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(description = \"The username.\", title = \"The username.\", required = true, minLength = 1)"));
-        assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(description = \"No description\", title = \"No summary\", minLength = 2, maxLength = 64)"));
-        assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(description = \"No description\", title = \"No summary\", required = true)"));
-        assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(description = \"Escape \\\"test\\\"\", title = \"The email address.\")"));
-        assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(description = \"No description\", title = \"No summary\", required = true, minLength = 1, maxLength = 2048)"));
-        assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(description = \"No description\", title = \"No summary\", maximum = \"10\", minimum = \"0\")"));
+        assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(description = \"No summary. No description.\", title = \"No summary.\", minLength = 2, maxLength = 64)"));
+        assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(description = \"No summary. No description.\", title = \"No summary.\", required = true)"));
+        assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(description = \"The email address. Escape \\\"test\\\"\", title = \"The email address.\")"));
+        assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(description = \"No summary. No description.\", title = \"No summary.\", required = true, minLength = 1, maxLength = 2048)"));
+        assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(description = \"No summary. No description.\", title = \"No summary.\", maximum = \"10\", minimum = \"0\")"));
+        assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(description = \"All bar. More detailed description of the list of bars.\", title = \"All bar.\")"));
+        assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(description = \"A nice foobar. More detailed description of the foobar.\", title = \"A nice foobar.\")"));
         assertFalse(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema()"));
     }
 

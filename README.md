@@ -10,13 +10,13 @@ The library in its current state was created for setting the data model document
 
 Supported:
 
- * Javadoc parsing for summary and description
+ * Javadoc parsing for summary and description for field and getters. Field have priority over getters.
  * Min, Max, Size, Column, NotEmpty, NotNull annotations
- * HATEAOS URI descriptions
+ * HATEAOS URI descriptions following the HAL specification targeting Spring REST data (`hateaosHAL` flag).
+ 
 
 Limitations:
 
-* No methods are scanned only fields and the class is annotated
 * No internal enums are found.
 
 # Usage
@@ -28,7 +28,7 @@ separators two asterisks have to be used.
 
 ```
 Enricher enricher = new Enricher(buildPath(User.class.getPackage().getName()),
-            Collections.singleton("**User.java"), Collections.singleton("**.bak"));
+            Collections.singleton("**User.java"), Collections.singleton("**.bak"), false);
 enricher.enrich();
 ```
 
@@ -63,7 +63,7 @@ enricher.enrich();
             <dependency>
                 <groupId>de.ohmesoftware</groupId>
                 <artifactId>javadoctoopenapischema</artifactId>
-                <version>0.0.1-SNAPSHOT</version>
+                <version>0.0.4-SNAPSHOT</version>
             </dependency>
         </dependencies>
     </plugin>

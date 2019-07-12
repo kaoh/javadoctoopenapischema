@@ -4,10 +4,16 @@ import com.github.javaparser.JavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.ast.body.FieldDeclaration;
+import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.comments.Comment;
-import com.github.javaparser.ast.expr.*;
+import com.github.javaparser.ast.expr.AnnotationExpr;
+import com.github.javaparser.ast.expr.BooleanLiteralExpr;
+import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.IntegerLiteralExpr;
+import com.github.javaparser.ast.expr.MemberValuePair;
+import com.github.javaparser.ast.expr.NormalAnnotationExpr;
+import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.javadoc.Javadoc;
@@ -18,10 +24,20 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.nio.file.*;
+import java.nio.file.FileSystems;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.PathMatcher;
+import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.sql.Blob;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -33,8 +49,8 @@ import java.util.stream.Collectors;
  */
 public class Enricher {
 
-    private static final String SUMMARY = "No summary";
-    private static final String DESCRIPTION = "No description";
+    private static final String SUMMARY = "No summary.";
+    private static final String DESCRIPTION = "No description.";
 
     private static final Logger LOGGER = LoggerFactory.getLogger(Enricher.class);
 
@@ -78,7 +94,9 @@ public class Enricher {
     private static final String EXCLUDES_OPT = "-excludes";
     private static final String INCLUDES_OPT = "-includes";
     private static final String SOURCE_OPT = "-sourcePath";
-    private static final String HATEAOS_OPT = "-hateaos";
+    private static final String HATEAOS_HAL_OPT = "-hateaosHAL";
+    private static final String GET = "get";
+    private static final String IS = "is";
 
     /**
      * The source path to enrich.
@@ -152,7 +170,7 @@ public class Enricher {
         String sourcePath = parseOption(args, SOURCE_OPT, true, null);
         String includes = parseOption(args, INCLUDES_OPT, false, null);
         String excludes = parseOption(args, EXCLUDES_OPT, false, null);
-        boolean hateaos = parseFlag(args, HATEAOS_OPT);
+        boolean hateaos = parseFlag(args, HATEAOS_HAL_OPT);
         Enricher enricher = new Enricher(sourcePath,
                 includes == null ? null : Arrays.stream(includes.split(INCLUDE_EXCLUDE_SEPARATOR)).map(String::trim).collect(Collectors.toSet()),
                 excludes == null ? null : Arrays.stream(excludes.split(INCLUDE_EXCLUDE_SEPARATOR)).map(String::trim).collect(Collectors.toSet()),
@@ -296,10 +314,44 @@ public class Enricher {
             classOrInterfaceDeclaration.getFields().forEach(
                     f -> addSchemaAnnotation(basePath, compilationUnit, f)
             );
+            classOrInterfaceDeclaration.getMethods().stream().filter(
+                    m -> checkIfMethodIsGetter(m) && !checkIfMethodIsForField(m, classOrInterfaceDeclaration)
+            ).forEach(
+                    m -> addSchemaAnnotation(basePath, compilationUnit, m)
+            );
             try (FileWriter fileWriter = new FileWriter(path.toFile())) {
                 fileWriter.write(compilationUnit.toString());
             }
         }
+    }
+
+    private boolean checkIfMethodIsGetter(MethodDeclaration methodDeclaration) {
+        String methodName = methodDeclaration.getNameAsString();
+        if (methodName.startsWith(GET) && methodDeclaration.getParameters().isEmpty()) {
+            return true;
+        }
+        return methodName.startsWith(IS) && methodDeclaration.getParameters().isEmpty()
+                && methodDeclaration.getType().isPrimitiveType() && methodDeclaration.getType().asPrimitiveType().asString().equals("boolean");
+    }
+
+    private String getFieldNameForMethod(MethodDeclaration methodDeclaration) {
+        String methodName = methodDeclaration.getNameAsString();
+        String fieldName = null;
+        if (methodName.startsWith(GET)) {
+            fieldName = methodName.substring(GET.length());
+        } else if (methodName.startsWith(IS)) {
+            fieldName = methodName.substring(IS.length());
+        }
+        return fieldName;
+    }
+
+    private boolean checkIfMethodIsForField(MethodDeclaration methodDeclaration,
+                                            ClassOrInterfaceDeclaration classOrInterfaceDeclaration) {
+        String fieldName = getFieldNameForMethod(methodDeclaration);
+        if (fieldName == null) {
+            return true;
+        }
+        return classOrInterfaceDeclaration.getFieldByName(fieldName).isPresent();
     }
 
     private void setSchemaMemberValue(NormalAnnotationExpr annotationExpr, String schemaProperty, boolean value) {
@@ -380,10 +432,9 @@ public class Enricher {
     protected TypeDeclaration parseClassOrInterfaceType(String basePath, CompilationUnit compilationUnit, ClassOrInterfaceType classOrInterfaceType) {
 
         CompilationUnit newCompilationUnit = parseFile(getSourceFile(basePath, compilationUnit, classOrInterfaceType));
-        TypeDeclaration newClassOrInterfaceDeclaration = newCompilationUnit.findFirst(TypeDeclaration.class).
+        return newCompilationUnit.findFirst(TypeDeclaration.class).
                 orElseThrow(() -> new RuntimeException(
                         String.format("Could not parse type: %s", classOrInterfaceType.asString())));
-        return newClassOrInterfaceDeclaration;
     }
 
     private boolean isEmbedded(String basePath, CompilationUnit compilationUnit, Type propertyClassOrInterfaceType) {
@@ -395,9 +446,8 @@ public class Enricher {
         }
         TypeDeclaration extendTypeDeclaration = parseClassOrInterfaceType(basePath, compilationUnit,
                 propertyClassOrInterfaceType.asClassOrInterfaceType());
-        boolean isEmbedded =  extendTypeDeclaration.isAnnotationPresent(EMBEDDABLE_ANNOTATION)
+        return extendTypeDeclaration.isAnnotationPresent(EMBEDDABLE_ANNOTATION)
                 || extendTypeDeclaration.isAnnotationPresent(getSimpleNameFromClass(EMBEDDABLE_ANNOTATION));
-        return isEmbedded;
     }
 
     private boolean isEnumProperty(String basePath, CompilationUnit compilationUnit, Type propertyClassOrInterfaceType) {
@@ -448,17 +498,15 @@ public class Enricher {
         if (isPrimitive(type)) {
             return true;
         }
-        if (isEnumProperty(basePath, compilationUnit, type)) {
-            return true;
-        }
-        return false;
+        return isEnumProperty(basePath, compilationUnit, type);
     }
 
-    private boolean isNotPrimitiveArray(String basePath, CompilationUnit compilationUnit, FieldDeclaration fieldDeclaration) {
-        return (fieldDeclaration.getCommonType().isArrayType()
-                && fieldDeclaration.getElementType() != null
-                && !isEmbedded(basePath, compilationUnit, fieldDeclaration.getElementType())
-                && !isSimpleType(basePath, compilationUnit, fieldDeclaration.getElementType()));
+    private boolean isNotPrimitiveArray(String basePath, CompilationUnit compilationUnit, Type commonType,
+                                        Type elementType) {
+        return (commonType.isArrayType()
+                && elementType != null
+                && !isEmbedded(basePath, compilationUnit, elementType)
+                && !isSimpleType(basePath, compilationUnit, elementType));
     }
 
     private boolean isCollection(Type type) {
@@ -474,13 +522,11 @@ public class Enricher {
     }
 
     private boolean isNotPrimitiveCollection(String basePath, CompilationUnit compilationUnit,
-                                             FieldDeclaration fieldDeclaration) {
-        Type commonType = fieldDeclaration.getCommonType();
-        boolean nonPrimitive = isCollection(commonType) && commonType.isClassOrInterfaceType() &&
+                                             Type commonType) {
+        return isCollection(commonType) && commonType.isClassOrInterfaceType() &&
                 commonType.asClassOrInterfaceType().getTypeArguments().isPresent() &&
                 !isEmbedded(basePath, compilationUnit, commonType.asClassOrInterfaceType().getTypeArguments().get().get(0)) &&
                 !isSimpleType(basePath, compilationUnit, commonType.asClassOrInterfaceType().getTypeArguments().get().get(0));
-        return nonPrimitive;
     }
 
     private void addSchemaAnnotation(String basePath, CompilationUnit compilationUnit,
@@ -495,17 +541,36 @@ public class Enricher {
         if (description == null) {
             description = summary;
         }
-        if (hateaos && bodyDeclaration.isFieldDeclaration()) {
-            FieldDeclaration fieldDeclaration = bodyDeclaration.asFieldDeclaration();
-            Type commonType = fieldDeclaration.getCommonType();
-            String fieldname = fieldDeclaration.getVariable(0).getNameAsString();
+        else {
+            String _description = summary;
+            if (!summary.endsWith(".")) {
+                _description += ".";
+            }
+            description = _description + " " + description;
+        }
 
-            boolean notPrimitiveArray = isNotPrimitiveArray(basePath, compilationUnit, fieldDeclaration);
-            boolean notPrimitiveCollection = isNotPrimitiveCollection(basePath, compilationUnit, fieldDeclaration);
+        Type commonType = null;
+        Type elementType = null;
+        String fieldname = null;
+        if (bodyDeclaration.isFieldDeclaration()) {
+            commonType = bodyDeclaration.asFieldDeclaration().getCommonType();
+            fieldname = bodyDeclaration.asFieldDeclaration().getVariable(0).getNameAsString();
+            elementType = bodyDeclaration.asFieldDeclaration().getElementType();
+        }
+        if (bodyDeclaration.isMethodDeclaration()) {
+            commonType = bodyDeclaration.asMethodDeclaration().getType();
+fieldname = getFieldNameForMethod(bodyDeclaration.asMethodDeclaration());
+            elementType = commonType.getElementType();
+        }
+
+
+        if (hateaos && (bodyDeclaration.isFieldDeclaration() || bodyDeclaration.isMethodDeclaration())) {
+            boolean notPrimitiveArray = isNotPrimitiveArray(basePath, compilationUnit, commonType, elementType);
+            boolean notPrimitiveCollection = isNotPrimitiveCollection(basePath, compilationUnit, commonType);
 
             if ((notPrimitiveArray || notPrimitiveCollection) ||
                     (!isSimpleType(basePath, compilationUnit, commonType) &&
-                            !fieldDeclaration.getCommonType().isArrayType() && !isCollection(fieldDeclaration.getCommonType()))) {
+                            !commonType.isArrayType() && !isCollection(commonType))) {
                 if (notPrimitiveArray || notPrimitiveCollection) {
                     summary = String.format("URIs to the resource associations: %s", summary);
                     description = String.format("For the resource creation with `POST` this attribute is an array of URIs to the associated resources. " +
@@ -533,8 +598,7 @@ public class Enricher {
         setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_DESCRIPTION, description);
         setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_TITLE, summary);
 
-        if (bodyDeclaration.isFieldDeclaration()) {
-            Type commonType = bodyDeclaration.asFieldDeclaration().getCommonType();
+        if (bodyDeclaration.isFieldDeclaration() || bodyDeclaration.isMethodDeclaration()) {
             boolean required = false;
             int maxSize = -1;
             int minSize = -1;

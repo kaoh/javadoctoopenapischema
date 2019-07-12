@@ -3,6 +3,7 @@ package de.ohmesoftware.javadoctoopenapischema.model.subdir;
 import javax.persistence.Column;
 import javax.persistence.Lob;
 import javax.validation.constraints.*;
+import java.util.List;
 
 /**
  * A user being able to log-in.
@@ -55,4 +56,27 @@ public class User {
     @Lob
     @NotEmpty
     public byte[] data;
+
+    /**
+     * A nice foobar.
+     * <p>
+     *   More detailed description of the foobar.
+     * </p>
+     * @return the foobar.
+     */
+    String getFoobar() {
+        return null;
+    }
+
+    /**
+     * All bar.
+     * <p>
+     *   More detailed description of the list of bars.
+     * </p>
+     * @return the bars.
+     */
+    List<Bar> getbars() {
+        return null;
+    }
+
 }
