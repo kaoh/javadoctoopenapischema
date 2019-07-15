@@ -575,7 +575,7 @@ fieldname = getFieldNameForMethod(bodyDeclaration.asMethodDeclaration());
                     summary = String.format("URIs to the resource associations: %s", summary);
                     description = String.format("For the resource creation with `POST` this attribute is an array of URIs to the associated resources. " +
                                     "For a `GET` operation on the item or collection resource " +
-                                    "this attribute of the same name is included in the `_links` section as `\"_links\": { \"%s\": { \"href\": \"First Resource URI\", \"href\": \"Second Resource URI\"} } ` section containing the array with the URIs to the associated resources. " +
+                                    "this attribute of the same name is included in the `_links` section as `\"_links\": { \"%s\": { \"href\": \"Resource URI\"} } ` section containing the URI to the associated collection of resources. " +
                                     "The associated resources can be updated with a `PUT` call with `Content-Type: text/uri-list` and a list with URIs to the updated associated resources.",
                             fieldname);
                 } else {
