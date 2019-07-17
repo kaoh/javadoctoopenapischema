@@ -41,15 +41,15 @@ public class TestEnricher {
         enricher.enrich();
         String newContent = IOUtils.toString(new FileReader(new File(buildPath(User.class.getName())+".java")));
         assertTrue(newContent.contains("package de.ohmesoftware.javadoctoopenapischema.model.subdir;"));
-        assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(description = \"No summary. No description.\", title = \"No summary.\")"));
-        assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(description = \"The username.\", title = \"The username.\", required = true, minLength = 1)"));
-        assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(description = \"No summary. No description.\", title = \"No summary.\", minLength = 2, maxLength = 64)"));
-        assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(description = \"No summary. No description.\", title = \"No summary.\", required = true)"));
+        assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(title = \"No summary.\", minLength = 36, maxLength = 64, description = \"No summary. No description.&lt;ul&gt;&lt;li&gt;The minimum length is 36.&lt;/li&gt;&lt;li&gt;The maximum length is 64.&lt;/li&gt;&lt;/ul&gt;\""));
+        assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(title = \"The username.\", required = true, minLength = 1, description = \"The username.&lt;ul&gt;&lt;li&gt;This value is required.&lt;/li&gt;&lt;li&gt;The minimum length is 1.&lt;/li&gt;&lt;/ul&gt;\")"));
+        assertTrue(newContent.contains(" @io.swagger.v3.oas.annotations.media.Schema(title = \"No summary.\", minLength = 2, maxLength = 64, description = \"No summary. No description.&lt;ul&gt;&lt;li&gt;The minimum length is 2.&lt;/li&gt;&lt;li&gt;The maximum length is 64.&lt;/li&gt;&lt;/ul&gt;\")"));
+        assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(title = \"No summary.\", required = true, description = \"No summary. No description.&lt;ul&gt;&lt;li&gt;This value is required.&lt;/li&gt;&lt;/ul&gt;\")"));
         assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(description = \"The email address. Escape \\\"test\\\"\", title = \"The email address.\")"));
-        assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(description = \"No summary. No description.\", title = \"No summary.\", required = true, minLength = 1, maxLength = 2048)"));
-        assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(description = \"No summary. No description.\", title = \"No summary.\", maximum = \"10\", minimum = \"0\")"));
-        assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(description = \"All bar. More detailed description of the list of bars.\", title = \"All bar.\")"));
-        assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(description = \"A nice foobar. More detailed description of the foobar.\", title = \"A nice foobar.\")"));
+        assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(title = \"No summary.\", required = true, minLength = 1, maxLength = 2048, description = \"No summary. No description.&lt;ul&gt;&lt;li&gt;This value is required.&lt;/li&gt;&lt;li&gt;The minimum length is 1.&lt;/li&gt;&lt;li&gt;The maximum length is 2048.&lt;/li&gt;&lt;/ul&gt;\")"));
+        assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(title = \"No summary.\", maximum = \"10\", minimum = \"0\", description = \"No summary. No description.&lt;ul&gt;&lt;li&gt;The maximum value is -1.&lt;/li&gt;&lt;li&gt;The minimum value is -1.&lt;/li&gt;&lt;/ul&gt;\")"));
+        assertTrue(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema(title = \"All bar.\", description = \"All bar. More detailed description of the list of bars.\")"));
+        assertTrue(newContent.contains(" @io.swagger.v3.oas.annotations.media.Schema(title = \"A nice foobar.\", description = \"A nice foobar. More detailed description of the foobar.\")"));
         assertFalse(newContent.contains("@io.swagger.v3.oas.annotations.media.Schema()"));
     }
 

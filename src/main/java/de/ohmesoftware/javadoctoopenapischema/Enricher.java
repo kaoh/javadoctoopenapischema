@@ -76,6 +76,10 @@ public class Enricher {
 
     private static final String PARAGRAPH_START = "<p>";
     private static final String PARAGRAPH_END = "</p>";
+    private static final String LI_START = "<li>";
+    private static final String LI_END = "</li>";
+    private static final String UL_START = "<ul>";
+    private static final String UL_END = "</ul>";
 
     private static final String NOT_EMPTY_ANNOTATION = "javax.validation.constraints.NotEmpty";
     private static final String COLUMN_ANNOTATION = "javax.persistence.Column";
@@ -540,8 +544,7 @@ public class Enricher {
         }
         if (description == null) {
             description = summary;
-        }
-        else {
+        } else {
             String _description = summary;
             if (!summary.endsWith(".")) {
                 _description += ".";
@@ -559,10 +562,9 @@ public class Enricher {
         }
         if (bodyDeclaration.isMethodDeclaration()) {
             commonType = bodyDeclaration.asMethodDeclaration().getType();
-fieldname = getFieldNameForMethod(bodyDeclaration.asMethodDeclaration());
+            fieldname = getFieldNameForMethod(bodyDeclaration.asMethodDeclaration());
             elementType = commonType.getElementType();
         }
-
 
         if (hateaos && (bodyDeclaration.isFieldDeclaration() || bodyDeclaration.isMethodDeclaration())) {
             boolean notPrimitiveArray = isNotPrimitiveArray(basePath, compilationUnit, commonType, elementType);
@@ -595,7 +597,6 @@ fieldname = getFieldNameForMethod(bodyDeclaration.asMethodDeclaration());
         if (schemaAnnotationExpr == null) {
             schemaAnnotationExpr = bodyDeclaration.addAndGetAnnotation(SCHEMA_ANNOTATION_CLASS).asNormalAnnotationExpr();
         }
-        setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_DESCRIPTION, description);
         setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_TITLE, summary);
 
         if (bodyDeclaration.isFieldDeclaration() || bodyDeclaration.isMethodDeclaration()) {
@@ -649,38 +650,48 @@ fieldname = getFieldNameForMethod(bodyDeclaration.asMethodDeclaration());
 
                 value = getAnnotationValue(annotationExpr, SIZE_MAX_PROP);
                 if (value != null) {
-                    maxSize = value.asIntegerLiteralExpr().asInt();
+                    // column has precedence
+                    if (maxSize < 0) {
+                        maxSize = value.asIntegerLiteralExpr().asInt();
+                    }
                 }
             }
 
+            // add constraints
+            description += UL_START;
             if (required) {
+                description += LI_START+"This value is required."+LI_END;
                 setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_REQUIRED, required);
             }
-            // length for String, arrays, blobs
+            // length for String, byte array
             if (commonType.asString().endsWith(String.class.getSimpleName())
                     || commonType.asString().endsWith(Blob.class.getSimpleName())
                     || commonType.isArrayType()) {
                 if (minSize > -1) {
+                    description += String.format(LI_START+"The minimum length is %d."+LI_END, minSize);
                     setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_MIN_LENGTH, minSize);
                 }
                 if (maxSize > -1) {
+                    description += String.format(LI_START+"The maximum length is %d."+LI_END, maxSize);
                     setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_MAX_LENGTH, maxSize);
-                }
-            } else {
-                if (minSize > -1) {
-                    setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_MIN, "" + minSize + "");
-                }
-                if (maxSize > -1) {
-                    setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_MAX, "" + maxSize + "");
                 }
             }
             if (max > -1) {
+                description += String.format(LI_START+"The maximum value is %d."+LI_END, maxSize);
                 setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_MAX, "" + max + "");
             }
             if (min > -1) {
+                description += String.format(LI_START+"The minimum value is %d."+LI_END, maxSize);
                 setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_MIN, "" + min + "");
             }
         }
+        if (description.endsWith(UL_START)) {
+            description = description.substring(0, description.length()-UL_START.length());
+        }
+        else {
+            description += UL_END;
+        }
+        setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_DESCRIPTION, description);
     }
 
 
