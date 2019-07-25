@@ -677,11 +677,11 @@ public class Enricher {
                 }
             }
             if (max > -1) {
-                description += String.format(LI_START+"The maximum value is %d."+LI_END, maxSize);
+                description += String.format(LI_START+"The maximum value is %d."+LI_END, max);
                 setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_MAX, "" + max + "");
             }
             if (min > -1) {
-                description += String.format(LI_START+"The minimum value is %d."+LI_END, maxSize);
+                description += String.format(LI_START+"The minimum value is %d."+LI_END, min);
                 setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_MIN, "" + min + "");
             }
         }
@@ -693,7 +693,6 @@ public class Enricher {
         }
         setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_DESCRIPTION, description);
     }
-
 
     private Expression getAnnotationValue(AnnotationExpr annotationExpr, String property) {
         if (annotationExpr.isNormalAnnotationExpr()) {

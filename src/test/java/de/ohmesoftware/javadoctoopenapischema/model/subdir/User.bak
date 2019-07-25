@@ -57,6 +57,10 @@ public class User {
     @NotEmpty
     public byte[] data;
 
+    @Min(0)
+    @Max(100000)
+    public int quantity;
+
     /**
      * A nice foobar.
      * <p>
