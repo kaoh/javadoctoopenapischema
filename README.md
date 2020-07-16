@@ -63,7 +63,7 @@ enricher.enrich();
             <dependency>
                 <groupId>de.ohmesoftware</groupId>
                 <artifactId>javadoctoopenapischema</artifactId>
-                <version>0.0.4-SNAPSHOT</version>
+                <version>0.0.1</version>
             </dependency>
         </dependencies>
     </plugin>
