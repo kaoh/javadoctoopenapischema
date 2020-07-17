@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>de.ohmesoftware</groupId>
     <artifactId>javadoctoopenapischema</artifactId>
-    <version>0.0.2-SNAPSHOT</version>
+    <version>0.0.2</version>
     <name>Javadoc to Swagger OpenAPI @Schema annotations enricher</name>
 
     <description>Library and command line for scanning a source path and sub directories and adding or
@@ -205,7 +205,7 @@
         <connection>scm:git:git://github.com/kaoh/javadoctoopenapischema.git</connection>
         <developerConnection>scm:git:ssh://github.com-javadoctoopenapischema/kaoh/javadoctoopenapischema.git</developerConnection>
         <url>https://github.com/kaoh/javadoctoopenapischema/tree/master</url>
-    <tag>HEAD</tag>
+    <tag>javadoctoopenapischema-0.0.2</tag>
   </scm>
 
 </project>
