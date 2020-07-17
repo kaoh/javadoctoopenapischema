@@ -107,6 +107,15 @@ mvn release:clean release:prepare
 mvn release:perform
 ```
 
+__NOTE:__ For the release step a PGP key is needed. 
+To specify the used PGP key use:
+
+    mvn release:perform "-Dgpg.keyname=C168D0FD480DE80D8E2BDF08051E4014CED6947A"
+
+or set the default key in `.gnupg/gpg.conf`:
+
+    default-key C168D0FD480DE80D8E2BDF08051E4014CED6947A
+
 Release the deployment using Nexus See https://central.sonatype.org/pages/releasing-the-deployment.html
 Or do it with Maven:
 
