@@ -203,7 +203,7 @@
 
     <scm>
         <connection>scm:git:git://github.com/kaoh/javadoctoopenapischema.git</connection>
-        <developerConnection>scm:git:ssh://github.com/kaoh/javadoctoopenapischema.git</developerConnection>
+        <developerConnection>scm:git:ssh://github.com-javadoctoopenapischema/kaoh/javadoctoopenapischema.git</developerConnection>
         <url>https://github.com/kaoh/javadoctoopenapischema/tree/master</url>
     <tag>HEAD</tag>
   </scm>
