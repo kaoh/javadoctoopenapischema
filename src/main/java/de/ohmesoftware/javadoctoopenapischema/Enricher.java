@@ -76,10 +76,10 @@ public class Enricher {
 
     private static final String PARAGRAPH_START = "<p>";
     private static final String PARAGRAPH_END = "</p>";
-    private static final String LI_START = "<li>";
-    private static final String LI_END = "</li>";
-    private static final String UL_START = "<ul>";
-    private static final String UL_END = "</ul>";
+    private static final String LI_START = "\\n * ";
+    private static final String LI_END = "";
+    private static final String UL_START = "";
+    private static final String UL_END = "";
 
     private static final String NOT_EMPTY_ANNOTATION = "javax.validation.constraints.NotEmpty";
     private static final String COLUMN_ANNOTATION = "javax.persistence.Column";
@@ -684,13 +684,14 @@ public class Enricher {
                 description += String.format(LI_START+"The minimum value is %d."+LI_END, min);
                 setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_MIN, "" + min + "");
             }
+            if (description.endsWith(UL_START)) {
+                description = description.substring(0, description.length()-UL_START.length());
+            }
+            else {
+                description += UL_END;
+            }
         }
-        if (description.endsWith(UL_START)) {
-            description = description.substring(0, description.length()-UL_START.length());
-        }
-        else {
-            description += UL_END;
-        }
+
         setSchemaMemberValue(schemaAnnotationExpr, SCHEMA_DESCRIPTION, description);
     }
 
